@@ -2,7 +2,7 @@
 Collection of scripts to configure Betaflight from your TX over CRSF.
 
 ### Installation
-1.  Upgrade Betaflight 3.4 (build #791 or later).
+1.  Upgrade Betaflight 3.4 (build #792 or later).
 2.  Copy the `crsf_cms.lua` file to the `/SCRIPTS/TELEMETRY/` directory on your Taranis.
 3.  Configure your remote to load the script as a Telemetry screen.
 4.  Load the Telemetry screen and the CMS data should begin streaming to your remote.
