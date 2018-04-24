@@ -8,7 +8,7 @@ Collection of scripts to configure Betaflight from your TX over CRSF.
 4.  Load the Telemetry screen and the CMS data should begin streaming to your remote.
 
 #### Can I use this with anything other than Crossfire?
-While it is a technical possiblity, it is not likely.  Crossfire is currently the only system that has enough overall bandwidth to serve up this capability with adequate speed and reliability.  At this time, other platforms suffer from small frame sizes and does not transmit data rapidly enough to make this an otherwise practical solution.
+While it is a technical possiblity, it is not likely.  Crossfire is currently the only system that has enough overall bandwidth to serve up this capability with adequate speed and reliability.  At this time, other platforms suffer from small frame sizes and do not transmit data rapidly enough to make this an otherwise practical solution.
 
 #### What can I expect?
 The "over-the-air" nature of these protocols are likely to suffer from occasional frame loss, so it is normal that lines may fail to appear on the screen.  If it appears that the CMS didn't load at all or that lines are missing from the display, press the "+" button to refresh the screen. This will instruct the script to request a refresh of the screen you are currently viewing. Given that this capability is in its infancy, bugs are likely to occur, so please report them they are encountered.
