@@ -9,6 +9,44 @@ CRSF_ADDRESS_TRANSMITTER            = 0xEA
 
 cmsMenuOpen = false
 lastMenuEventTime = 0
+radio = {}
+
+local supportedPlatforms = {
+    x7 =
+    {
+        refreshEvent = EVT_ENTER_BREAK,
+        lcd = {
+            width = 128,
+            height = 64,
+            rows = 8,
+            cols = 32,
+            topPadding = 1,
+            pixelsPerRow = 8,
+            pixelsPerChar = 5,
+        }
+    },
+    x9 =
+    {
+        refreshEvent = EVT_PLUS_BREAK,
+        lcd = {
+            width = 212,
+            height = 64,
+            rows = 8,
+            cols = 32,
+            topPadding = 2,
+            pixelsPerRow = 8,
+            pixelsPerChar = 6,
+        }
+    },
+}
+
+local supportedRadios =
+{
+    ["x7"] = supportedPlatforms.x7,
+    ["x7s"] = supportedPlatforms.x7,
+    ["x9d"] = supportedPlatforms.x9,
+    ["x9d+"] = supportedPlatforms.x9,
+}
 
 screenBuffer = {
     rows = 8,
@@ -33,18 +71,16 @@ screenBuffer = {
     end,
     draw = function()
         lcd.clear()
-        local pixelsPerRow = 8
-        local pixelsPerChar = 6
         -- draw buffer monospaced, as font characters vary in width.
         for row=1,screenBuffer.rows do
             for col=1,screenBuffer.cols do
                 char = string.sub(screenBuffer.buffer[row], col, col)
-                xPos = ((col-1)*pixelsPerChar)+1
-                yPos = ((row-1)*pixelsPerRow)+1
+                xPos = ((col-1)*radio.lcd.pixelsPerChar)+1
+                yPos = ((row-1)*radio.lcd.pixelsPerRow)+1
                 lcd.drawText(xPos, yPos, char, SMLSIZE) 
             end
         end
-        lcd.drawText(165, 2, "Refresh >>" , SMLSIZE) 
+        lcd.drawText(radio.lcd.width-47, radio.lcd.topPadding, "Refresh >>" , SMLSIZE) 
     end
 }
 
@@ -70,6 +106,13 @@ local function displayPortCmd(cmd)
 end
 
 local function init()
+    local ver, rad, maj, min, rev = getVersion()
+    radio = supportedRadios[rad]
+    if not radio then
+        error("Radio not supported: "..rad)
+    end
+    screenBuffer.rows = radio.lcd.rows
+    screenBuffer.cols = radio.lcd.cols
     screenBuffer.reset()
 end
 
@@ -91,7 +134,7 @@ local function run(event)
     if cmsMenuOpen == false then
         displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_OPEN)
     end
-    if (event == EVT_PLUS_BREAK) then
+    if (event == radio.refreshEvent) then
         displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_POLL)
     end
 end
