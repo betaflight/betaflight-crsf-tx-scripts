@@ -14,20 +14,29 @@ radio = {}
 local supportedPlatforms = {
     x7 =
     {
-        refreshEvent = EVT_ENTER_BREAK,
+        refresh = {
+            event = EVT_ENTER_BREAK,
+            text = "Refresh: [ENT]",
+            top = 1,
+            left = 64,
+        },
         lcd = {
             width = 128,
             height = 64,
             rows = 8,
             cols = 32,
-            topPadding = 1,
             pixelsPerRow = 8,
             pixelsPerChar = 5,
         }
     },
     x9 =
     {
-        refreshEvent = EVT_PLUS_BREAK,
+        refresh = {
+            event = EVT_PLUS_BREAK,
+            text = "Refresh: [+]",
+            top = 1,
+            left = 156,
+        },
         lcd = {
             width = 212,
             height = 64,
@@ -80,7 +89,7 @@ screenBuffer = {
                 lcd.drawText(xPos, yPos, char, SMLSIZE) 
             end
         end
-        lcd.drawText(radio.lcd.width-47, radio.lcd.topPadding, "Refresh >>" , SMLSIZE) 
+        lcd.drawText(radio.refresh.left, radio.refresh.top, radio.refresh.text, SMLSIZE) 
     end
 }
 
@@ -134,7 +143,7 @@ local function run(event)
     if cmsMenuOpen == false then
         displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_OPEN)
     end
-    if (event == radio.refreshEvent) then
+    if (event == radio.refresh.event) then
         displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_POLL)
     end
 end
