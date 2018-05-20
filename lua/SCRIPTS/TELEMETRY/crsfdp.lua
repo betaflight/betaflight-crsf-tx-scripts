@@ -1,9 +1,10 @@
-CRSF_FRAMETYPE_DISPLAYPORT_UPDATE   = 0x7D
-CRSF_FRAMETYPE_DISPLAYPORT_CLEAR    = 0x7E
-CRSF_FRAMETYPE_DISPLAYPORT_CMD      = 0x7F
-CRSF_DISPLAYPORT_SUBCMD_OPEN        = 0x01
-CRSF_DISPLAYPORT_SUBCMD_CLOSE       = 0x02
-CRSF_DISPLAYPORT_SUBCMD_POLL        = 0x03
+
+CRSF_FRAMETYPE_DISPLAYPORT_CMD      = 0x7D
+CRSF_DISPLAYPORT_SUBCMD_UPDATE      = 0x01
+CRSF_DISPLAYPORT_SUBCMD_CLEAR       = 0x02
+CRSF_DISPLAYPORT_SUBCMD_OPEN        = 0x03
+CRSF_DISPLAYPORT_SUBCMD_CLOSE       = 0x04
+CRSF_DISPLAYPORT_SUBCMD_POLL        = 0x05
 CRSF_ADDRESS_BETAFLIGHT             = 0xC8
 CRSF_ADDRESS_TRANSMITTER            = 0xEA
 
@@ -24,7 +25,7 @@ local supportedPlatforms = {
             width = 128,
             height = 64,
             rows = 8,
-            cols = 32,
+            cols = 26,
             pixelsPerRow = 8,
             pixelsPerChar = 5,
         }
@@ -109,8 +110,13 @@ local function arrayToString(arr)
     return str
 end
 
-local function displayPortCmd(cmd)
+local function displayPortCmd(cmd, data)
     local payloadOut = { CRSF_ADDRESS_BETAFLIGHT, CRSF_ADDRESS_TRANSMITTER, cmd }
+    if data ~= nil then
+        for i=1,#(data) do
+            payloadOut[3+i] = data[i]
+        end
+    end
     crossfireTelemetryPush(CRSF_FRAMETYPE_DISPLAYPORT_CMD, payloadOut) 
 end
 
@@ -128,29 +134,30 @@ end
 local function run(event)
     lastMenuEventTime = getTime()
     local command, data = crossfireTelemetryPop()
-    if data ~= nil then
-        if data[1] == CRSF_ADDRESS_TRANSMITTER and data[2] == CRSF_ADDRESS_BETAFLIGHT then
-            if command == CRSF_FRAMETYPE_DISPLAYPORT_CLEAR then
-                screenBuffer.reset()
-            elseif command == CRSF_FRAMETYPE_DISPLAYPORT_UPDATE then
-                local row = data[3] + 1
-                screenBuffer.update(row,1,arrayToString(subrange(data,4,#data-1)))
+    if (data ~= nil) and (#data > 2) then
+        if (command == CRSF_FRAMETYPE_DISPLAYPORT_CMD) and (data[1] == CRSF_ADDRESS_TRANSMITTER) and (data[2] == CRSF_ADDRESS_BETAFLIGHT) then
+            local subCommand = data[3];
+            if (subCommand == CRSF_DISPLAYPORT_SUBCMD_UPDATE) then
+                local row = data[4] + 1
+                screenBuffer.update(row,1,arrayToString(subrange(data,5,#data-1)))
                 cmsMenuOpen = true
+            elseif (subCommand == CRSF_DISPLAYPORT_SUBCMD_CLEAR) then
+                screenBuffer.reset()
             end
         end
     end
     screenBuffer.draw()
     if cmsMenuOpen == false then
-        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_OPEN)
+        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_OPEN, { screenBuffer.rows, screenBuffer.cols })
     end
     if (event == radio.refresh.event) then
-        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_POLL)
+        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_POLL, nil)
     end
 end
 
 local function background()
     if cmsMenuOpen == true and lastMenuEventTime + 100 < getTime() then
-        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_CLOSE)
+        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_CLOSE, nil)
         cmsMenuOpen = false
     end
 end
