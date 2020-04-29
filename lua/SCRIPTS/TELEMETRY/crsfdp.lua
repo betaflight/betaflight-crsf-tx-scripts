@@ -1,16 +1,68 @@
-
-CRSF_FRAMETYPE_DISPLAYPORT_CMD      = 0x7D
-CRSF_DISPLAYPORT_SUBCMD_UPDATE      = 0x01
-CRSF_DISPLAYPORT_SUBCMD_CLEAR       = 0x02
-CRSF_DISPLAYPORT_SUBCMD_OPEN        = 0x03
-CRSF_DISPLAYPORT_SUBCMD_CLOSE       = 0x04
-CRSF_DISPLAYPORT_SUBCMD_POLL        = 0x05
-CRSF_ADDRESS_BETAFLIGHT             = 0xC8
-CRSF_ADDRESS_TRANSMITTER            = 0xEA
-
 cmsMenuOpen = false
 lastMenuEventTime = 0
 radio = {}
+
+screenBuffer = {
+    rows = 8,
+    cols = 32,
+    buffer = {},
+    data = {},
+    batchId = 0,
+    sequence = 0,
+    reset = function()
+        screenBuffer.buffer = {}
+        screenBuffer.data = {}
+        screenBuffer.batchId = 0
+        screenBuffer.sequence = 0
+    end,
+    draw = function()
+        if (#screenBuffer.buffer ~= nil and #screenBuffer.buffer > 0) then
+            lcd.clear()
+            for char=1,#screenBuffer.buffer do
+                if (screenBuffer.buffer[char] ~= 32) then -- skip spaces (CPU no likey)
+                    c = string.char(screenBuffer.buffer[char])
+                    row = math.ceil(char/screenBuffer.cols)
+                    col = char-((row-1)*screenBuffer.cols)
+                    xPos = ((col-1)*radio.lcd.pixelsPerChar)+1
+                    yPos = ((row-1)*radio.lcd.pixelsPerRow)+1
+                    lcd.drawText(xPos, yPos, c, SMLSIZE)
+                end
+            end
+        end
+    end
+}
+
+local _ = {
+    frame = {
+        destination = 1,
+        source = 2,
+        subCommand = 3,
+        meta = 4,
+        sequence = 5,
+        data = 6
+    },
+    address = {
+        transmitter = 0xEA,
+        betaflight = 0xC8
+    },
+    frameType = {
+        displayPort = 0x7D 
+    },
+    subCommand = {
+        update = 0x01,
+        clear = 0x02,
+        open = 0x03,
+        close = 0x04,
+        poll = 0x05
+    },
+    bitmask = {
+        firstChunk = 0x80,
+        lastChunk = 0x40,
+        batchId = 0x3F,
+        rleDictValueMask = 0x7F,
+        rleCharRepeatedMask = 0x80
+    }
+}
 
 local supportedPlatforms = {
     x7 =
@@ -58,66 +110,53 @@ local supportedRadios =
     ["x9d+"] = supportedPlatforms.x9,
 }
 
-screenBuffer = {
-    rows = 8,
-    cols = 32,
-    buffer = {},
-    resetRow = function(row)
-        screenBuffer.buffer[row] = string.rep(" ", screenBuffer.cols)
-    end,
-    reset = function()
-        for i=1, screenBuffer.rows do
-            screenBuffer.resetRow(i)
-        end
-    end,
-    update = function(row,col,str) 
-        if row > screenBuffer.rows or col > screenBuffer.cols then
-            return nil
-        end
-        local bufferLeft = string.sub(screenBuffer.buffer[row],1,col-1)
-        local bufferRightStart = string.len(bufferLeft) + string.len(str) + 1
-        local bufferRight = string.sub(screenBuffer.buffer[row],bufferRightStart, screenBuffer.cols)
-        screenBuffer.buffer[row] = string.sub(string.format("%s%s%s", bufferLeft, str, bufferRight),1,screenBuffer.cols)
-    end,
-    draw = function()
-        lcd.clear()
-        -- draw buffer monospaced, as font characters vary in width.
-        for row=1,screenBuffer.rows do
-            for col=1,screenBuffer.cols do
-                char = string.sub(screenBuffer.buffer[row], col, col)
-                xPos = ((col-1)*radio.lcd.pixelsPerChar)+1
-                yPos = ((row-1)*radio.lcd.pixelsPerRow)+1
-                lcd.drawText(xPos, yPos, char, SMLSIZE) 
+local function cRleDecode(buf)
+    local dest = {}
+    local rpt = false
+    local c = nil
+    for i=1, #buf do
+        if (rpt == false) then
+            c = bit32.band(buf[i], _.bitmask.rleDictValueMask)
+            if (bit32.band(buf[i], _.bitmask.rleCharRepeatedMask) > 0) then
+                rpt = true
+            else
+                dest[#dest + 1] = c
             end
+        else
+            for j=1, buf[i] do
+                dest[#dest + 1] = c
+            end
+            rpt = false
         end
-        lcd.drawText(radio.refresh.left, radio.refresh.top, radio.refresh.text, SMLSIZE) 
     end
-}
+    return dest
+end
 
 local function subrange(t, first, last)
     local sub = {}
+    local sublen = 0
     for i=first,last do
-        sub[#sub + 1] = t[i]
+        sublen = sublen + 1
+        sub[sublen] = t[i]
     end
     return sub
 end
 
-local function arrayToString(arr)
-    local str = ""
-    for i=1,#arr do
-        str = string.format("%s%c",str,arr[i])
+local function arrayAppend(dst, src)
+    local dstLen = #dst
+    for i=1, #src do
+        dst[dstLen+i] = src[i]
     end
-    return str
 end
 
 local function displayPortCmd(cmd, data)
-    local payloadOut = { CRSF_ADDRESS_BETAFLIGHT, CRSF_ADDRESS_TRANSMITTER, cmd }
+    local payloadOut = { _.address.betaflight, _.address.transmitter, cmd }
     if data ~= nil then
         for i=1,#(data) do
             payloadOut[3+i] = data[i]
         end
     end
-    crossfireTelemetryPush(CRSF_FRAMETYPE_DISPLAYPORT_CMD, payloadOut) 
+    crossfireTelemetryPush(_.frameType.displayPort, payloadOut) 
 end
 
 local function init()
@@ -133,31 +172,50 @@ end
 
 local function run(event)
     lastMenuEventTime = getTime()
-    local command, data = crossfireTelemetryPop()
+    local frameType, data = crossfireTelemetryPop()
     if (data ~= nil) and (#data > 2) then
-        if (command == CRSF_FRAMETYPE_DISPLAYPORT_CMD) and (data[1] == CRSF_ADDRESS_TRANSMITTER) and (data[2] == CRSF_ADDRESS_BETAFLIGHT) then
-            local subCommand = data[3];
-            if (subCommand == CRSF_DISPLAYPORT_SUBCMD_UPDATE) then
-                local row = data[4] + 1
-                screenBuffer.update(row,1,arrayToString(subrange(data,5,#data-1)))
+        if (frameType == _.frameType.displayPort) and (data[_.frame.destination] == _.address.transmitter) and (data[_.frame.source] == _.address.betaflight) then
+            local subCommand = data[_.frame.subCommand]
+            if (subCommand == _.subCommand.update) then
+                local firstChunk = bit32.band(data[_.frame.meta], _.bitmask.firstChunk)
+                local lastChunk = bit32.band(data[_.frame.meta], _.bitmask.lastChunk)
+                local batchId = bit32.band(data[_.frame.meta], _.bitmask.batchId)
+                local sequence = data[_.frame.sequence]
+                local frameData = subrange(data, _.frame.data, #data)
+                if (firstChunk ~= 0) then
+                    screenBuffer.reset()
+                    screenBuffer.batchId = batchId
+                    screenBuffer.sequence = 0
+                end
+                if(screenBuffer.batchId == batchId and screenBuffer.sequence == sequence) then
+                    screenBuffer.sequence = sequence + 1
+                    arrayAppend(screenBuffer.data, frameData)
+                    if (lastChunk ~= 0) then
+                        screenBuffer.buffer = cRleDecode(screenBuffer.data)
+                        screenBuffer.draw()
+                        screenBuffer.reset()
+                    end
+                else
+                    displayPortCmd(_.subCommand.poll, nil)
+                end                
                 cmsMenuOpen = true
-            elseif (subCommand == CRSF_DISPLAYPORT_SUBCMD_CLEAR) then
+            elseif (subCommand == _.subCommand.clear) then
                 screenBuffer.reset()
             end
         end
     end
-    screenBuffer.draw()
-    if cmsMenuOpen == false then
-        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_OPEN, { screenBuffer.rows, screenBuffer.cols })
-    end
-    if (event == radio.refresh.event) then
-        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_POLL, nil)
+    if (cmsMenuOpen == true) then 
+        lcd.drawText(radio.refresh.left, radio.refresh.top, radio.refresh.text, SMLSIZE) 
+    elseif (cmsMenuOpen == false) then
+        displayPortCmd(_.subCommand.open, { screenBuffer.rows, screenBuffer.cols })
+    elseif (event == radio.refresh.event) then
+        displayPortCmd(_.subCommand.poll, nil)
     end
 end
 
 local function background()
     if cmsMenuOpen == true and lastMenuEventTime + 100 < getTime() then
-        displayPortCmd(CRSF_DISPLAYPORT_SUBCMD_CLOSE, nil)
+        displayPortCmd(_.subCommand.close, nil)
         cmsMenuOpen = false
     end
 end
