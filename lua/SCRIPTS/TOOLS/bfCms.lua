@@ -1,3 +1,5 @@
+local toolName = "TNS|Betaflight CMS|TNE"
+
 cmsMenuOpen = false
 lastMenuEventTime = 0
 radio = {}
@@ -73,6 +75,9 @@ local supportedPlatforms = {
             top = 1,
             left = 64,
         },
+        exit = {
+            event = EVT_EXIT_BREAK
+        },
         lcd = {
             width = 128,
             height = 64,
@@ -89,6 +94,9 @@ local supportedPlatforms = {
             text = "Refresh: [+]",
             top = 1,
             left = 156,
+        },
+        exit = {
+            event = EVT_EXIT_BREAK
         },
         lcd = {
             width = 212,
@@ -168,6 +176,8 @@ local function init()
     screenBuffer.rows = radio.lcd.rows
     screenBuffer.cols = radio.lcd.cols
     screenBuffer.reset()
+    displayPortCmd(_.subCommand.close, nil)
+    cmsMenuOpen = false
 end
 
 local function run(event)
@@ -206,18 +216,19 @@ local function run(event)
     end
     if (cmsMenuOpen == true) then 
         lcd.drawText(radio.refresh.left, radio.refresh.top, radio.refresh.text, SMLSIZE) 
-    elseif (cmsMenuOpen == false) then
+    end
+    if (cmsMenuOpen == false) then
         displayPortCmd(_.subCommand.open, { screenBuffer.rows, screenBuffer.cols })
-    elseif (event == radio.refresh.event) then
+    end
+    if (event == radio.refresh.event) then
         displayPortCmd(_.subCommand.poll, nil)
     end
-end
-
-local function background()
-    if cmsMenuOpen == true and lastMenuEventTime + 100 < getTime() then
+    if (event == radio.exit.event) then 
         displayPortCmd(_.subCommand.close, nil)
         cmsMenuOpen = false
-    end
+        return 1
+    end 
+    return 0 
 end
 
-return { init=init, run=run, background=background }
+return { init=init, run=run }
