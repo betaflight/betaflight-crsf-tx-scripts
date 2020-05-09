@@ -157,7 +157,7 @@ local function arrayAppend(dst, src)
     end
 end
 
-local function displayPortCmd(cmd, data)
+function displayPortCmd(cmd, data)
     local payloadOut = { _.address.betaflight, _.address.transmitter, cmd }
     if data ~= nil then
         for i=1,#(data) do
